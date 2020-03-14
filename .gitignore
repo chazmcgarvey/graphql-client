@@ -1,0 +1,13 @@
+*#
+*.bs
+*.o
+*.tar*
+*~
+/.build
+/.perl-version
+/GraphQL-Client-*
+/MYMETA.*
+/blib
+/cover_db
+/local*
+/pm_to_blib

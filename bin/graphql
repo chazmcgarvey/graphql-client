@@ -1,0 +1,193 @@
+#!/usr/bin/env perl
+# PODNAME: graphql
+# ABSTRACT: Command-line GraphQL client
+
+use warnings;
+use strict;
+
+use Getopt::Long;
+use GraphQL::Client;
+use Scalar::Util qw(reftype);
+
+our $VERSION = '999.999'; # VERSION
+
+my $url;
+my $transport   = {};
+my $query       = '-';
+my $variables   = {};
+my $format      = 'json:pretty';
+my $unpack      = 0;
+my $outfile;
+GetOptions(
+    'url|u=s'           => \$url,
+    'transport|t=s%'    => \$transport,
+    'query|mutation=s'  => \$query,
+    'variable|var|d=s%' => \$variables,
+    'format|f=s'        => \$format,
+    'unpack!'           => \$unpack,
+    'output|o=s'        => \$outfile,
+) or die "Invalid options.\n";
+
+$url    = shift if !$url;
+$query  = shift if !$query || $query eq '-';
+
+my $client = GraphQL::Client->new(
+    %$transport,
+    url     => $url,
+);
+$client->transport;     # just make sure we can load the transport
+
+if (!$query || $query eq '-') {
+    print STDERR "Interactive mode engaged! Waiting for a query on <STDIN>...\n" if -t STDIN;
+    $query = do { local $/; <> };
+}
+
+my $resp = $client->request($query, $variables);
+my $err  = $resp->{errors};
+my $data = !$unpack || $err ? $resp : $resp->{data};
+
+if ($outfile) {
+    open(my $out, '>', $outfile) or die "Open $outfile failed: $!";
+    *STDOUT = $out;
+}
+
+$format = lc($format);
+if ($format eq 'json') {
+    require JSON::MaybeXS;
+    print JSON::MaybeXS->new(utf8 => 1)->encode($data);
+}
+elsif ($format eq 'json:pretty') {
+    require JSON::MaybeXS;
+    print JSON::MaybeXS->new(utf8 => 1, pretty => 1)->encode($data);
+}
+elsif ($format eq 'yaml') {
+    require YAML;
+    print YAML::Dump($data);
+}
+else {
+    require Data::Dumper;
+    print Data::Dumper::Dumper($data);
+}
+
+exit($unpack && $err ? 1 : 0);
+
+=head1 SYNOPSIS
+
+    graphql <URL> <QUERY> [--var key=value]... [--transport key=value]...
+            [--[no-]unpack] [--format json|json:pretty|yaml]
+
+=head1 DESCRIPTION
+
+C<graphql> is a command-line program for executing queries and mutations on
+a L<GraphQL|https://graphql.org/> server.
+
+=head1 OPTIONS
+
+=head2 --url STR
+
+The URL of the GraphQL server endpoint.
+
+If no C<--url> option is given, the first argument is assumed to be the URL.
+
+Alias: C<-u>
+
+=head2 --query STR
+
+The query or mutation to execute.
+
+If no C<--query> option is given, the first argument (after URL) is assumed to
+be the query.
+
+If the value is C<-> (which is the default), the query will be read from
+C<STDIN>.
+
+See: L<https://graphql.org/learn/queries/>
+
+Alias: C<--mutation>
+
+=head2 --variable KEY=VALUE
+
+A key-value pair
+
+See: L<https://graphql.org/learn/queries/#variables>
+
+Aliases: C<--var>, C<-d>
+
+=head2 --transport KEY=VALUE
+
+Key-value pairs for configuring the transport (usually HTTP).
+
+Alias: C<-t>
+
+=head2 --unpack
+
+Enables C<unpack> mode.
+
+By default, the response structure is printed as-is from the server, and the
+program exits 0.
+
+When C<unpack> mode is enabled, if the response completes with no errors, only
+the data section of the response is printed and the program exits 0. If the
+response has errors, the whole response structure is printed as-is and the
+program exits 1.
+
+=head2 --format STR
+
+Sets the output format. Possible values include:
+
+=for :list
+* C<json:pretty> (default)
+* C<json>
+* C<yaml>
+* C<dump>
+
+Alias: C<-f>
+
+=head1 EXAMPLES
+
+Different ways to provide the query/mutation:
+
+    graphql http://localhost:4000/graphql {hello}
+
+    echo {hello} | graphql http://localhost:4000/graphql
+
+    graphql http://localhost:4000/graphql <<END
+    > {hello}
+    > END
+
+    graphql http://localhost:4000/graphql
+    Interactive mode engaged! Waiting for a query on <STDIN>...
+    {hello}
+    ^D
+
+This example shows the effect of L<--unpack>:
+
+    graphql http://localhost:4000/graphql {hello}
+
+    # Output:
+    {
+        "data" : {
+            "hello" : "Hello world!"
+        }
+    }
+
+    graphql --unpack http://localhost:4000/graphql {hello}
+
+    # Output:
+    {
+        "hello" : "Hello world!"
+    }
+
+Execute a query with variables:
+
+    graphql unpack http://localhost:4000/graphql <<END --var episode=JEDI
+    > query HeroNameAndFriends($episode: Episode) {
+    >   hero(episode: $episode) {
+    >     name
+    >     friends {
+    >       name
+    >     }
+    >   }
+    > }
+    > END
+
