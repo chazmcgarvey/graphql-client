@@ -1,6 +1,7 @@
 package GraphQL::Client::http;
 # ABSTRACT: GraphQL over HTTP
 
+use 5.010;
 use warnings;
 use strict;
 
@@ -18,8 +19,8 @@ sub request {
     my $self = shift;
     my ($request, $options) = @_;
 
-    my $url     = $options->{url} || $self->url;
-    my $method  = $options->{method} || $self->method;
+    my $url     = delete $options->{url}    || $self->url;
+    my $method  = delete $options->{method} || $self->method;
 
     my $data = {%$request};
 
@@ -36,7 +37,7 @@ sub request {
         $options->{headers}{'content-type'}   = 'application/json';
     }
 
-    return $self->_handle_response($self->_any_ua->request($method, $url, $options));
+    return $self->_handle_response($self->any_ua->request($method, $url, $options));
 }
 
 sub _handle_response {
@@ -46,23 +47,40 @@ sub _handle_response {
     my $handle_error = sub {
         my $resp = shift;
 
-        return {
-            errors => [
-                {
-                    message => "HTTP transport returned $resp->{status}: $resp->{content}",
-                    x_transport_response => $resp,
-                },
-            ],
-        };
+        my $data = eval { $self->json->decode($resp->{content}) };
+        if ($@) {
+            my $content = $resp->{content} // 'No content';
+            my $reason  = $resp->{reason}  // '';
+            $data = {
+                errors => [
+                    {
+                        message => "HTTP transport returned $resp->{status} ($reason): $content",
+                    },
+                ],
+            };
+        }
+
+        return ($data, 'graphql', $resp);
     };
     my $handle_response = sub {
         my $resp = shift;
 
         return $handle_error->($resp) if !$resp->{success};
-        return $self->json->decode($resp->{content});
+        my $data = eval { $self->json->decode($resp->{content}) };
+        if (my $err = $@) {
+            warn $err if $ENV{GRAPHQL_CLIENT_DEBUG};
+            $data = {
+                errors => [
+                    {
+                        message => 'HTTP transport failed to decode response from GraphQL server.',
+                    },
+                ],
+            };
+        }
+        return $data;
     };
 
-    if ($self->_any_ua->response_is_future) {
+    if ($self->any_ua->response_is_future) {
         return $resp->transform(
             done => $handle_response,
             fail => $handle_error,
@@ -83,6 +101,11 @@ sub ua {
     };
 }
 
+sub any_ua {
+    my $self = shift;
+    $self->{any_ua} //= HTTP::AnyUA->new(ua => $self->ua);
+}
+
 sub url {
     my $self = shift;
     $self->{url};
@@ -99,11 +122,6 @@ sub json {
         require JSON::MaybeXS;
         JSON::MaybeXS->new(utf8 => 1);
     };
-}
-
-sub _any_ua {
-    my $self = shift;
-    $self->{_any_ua} //= HTTP::AnyUA->new(ua => $self->ua);
 }
 
 1;
@@ -163,6 +181,10 @@ A user agent, such as:
 * and more...
 
 See L<HTTP::AnyUA/"SUPPORTED USER AGENTS">.
+
+=attr any_ua
+
+The L<HTTP::AnyUA> instance. Can be used to apply middleware if desired.
 
 =attr method
 

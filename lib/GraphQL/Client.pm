@@ -5,6 +5,7 @@ use warnings;
 use strict;
 
 use Module::Load qw(load);
+use Scalar::Util qw(reftype);
 use Throw;
 
 our $VERSION = '999.999'; # VERSION
@@ -18,21 +19,24 @@ sub new {
 
 sub request {
     my $self = shift;
-    my ($query, $variables, $options) = @_;
+    my ($query, $variables, $operation_name, $options) = @_;
 
-    my $transport_opts = {%{$options || {}}};
-    my $operation_name = delete($transport_opts->{operation_name}) // delete($transport_opts->{operationName});
+    if ((reftype($operation_name) || '') eq 'HASH') {
+        $options = $operation_name;
+        $operation_name = undef;
+    }
 
     my $request = {
         query => $query,
-        $variables ? (variables => $variables) : (),
+        ($variables && %$variables) ? (variables => $variables) : (),
         $operation_name ? (operationName => $operation_name) : (),
     };
 
-    my $resp = $self->transport->request($request, $transport_opts);
+    my $resp = $self->transport->request($request, $options);
     return $self->_handle_response($resp);
 }
 
+my $ERROR_MESSAGE = 'The GraphQL server returned errors';
 sub _handle_response {
     my $self = shift;
     my ($resp) = @_;
@@ -40,17 +44,20 @@ sub _handle_response {
     if (eval { $resp->isa('Future') }) {
         return $resp->followed_by(sub {
             my $f = shift;
-            if (my $exception = $f->failure) {
-                if ($self->unpack || !$exception->{errors}) {
-                    return Future->fail($exception);
+            if (my ($exception, $category, @details) = $f->failure) {
+                if (!$exception->{errors}) {
+                    return Future->fail($exception, $category, @details);
+                }
+                if ($self->unpack) {
+                    return Future->fail($ERROR_MESSAGE, 'graphql', $exception, @details);
                 }
                 return Future->done($exception);
             }
             else {
-                my $resp = $f->get;
+                my ($resp, @other) = $f->get;
                 if ($self->unpack) {
                     if ($resp->{errors}) {
-                        return Future->fail($resp);
+                        return Future->fail($ERROR_MESSAGE, 'graphql', $resp, @other);
                     }
                     return Future->done($resp->{data});
                 }
@@ -61,9 +68,9 @@ sub _handle_response {
     else {
         if ($self->unpack) {
             if ($resp->{errors}) {
-                throw 'The GraphQL server returned errors', {
-                    %$resp,
-                    type => 'graphql',
+                throw $ERROR_MESSAGE, {
+                    type        => 'graphql',
+                    response    => $resp,
                 };
             }
             return $resp->{data};
@@ -87,7 +94,8 @@ sub transport {
     $self->{transport} //= do {
         my $class = $self->_transport_class;
         eval { load $class };
-        if (my $err = $@) {
+        if ((my $err = $@) || !$class->can('request')) {
+            $err ||= "Loaded $class, but it doesn't look like a proper transport.\n";
             warn $err if $ENV{GRAPHQL_CLIENT_DEBUG};
             _croak "Failed to load transport for \"${class}\"";
         }
@@ -159,6 +167,8 @@ Construct a new client.
 
     $response = $client->request($query);
     $response = $client->request($query, \%variables);
+    $response = $client->request($query, \%variables, $operation_name);
+    $response = $client->request($query, \%variables, $operation_name, \%transport_options);
     $response = $client->request($query, \%variables, \%transport_options);
 
 Get a response from the GraphQL server.
