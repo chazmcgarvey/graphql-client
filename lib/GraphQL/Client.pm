@@ -6,18 +6,19 @@ use strict;
 
 use Module::Load qw(load);
 use Scalar::Util qw(reftype);
-use Throw;
+use namespace::clean;
 
 our $VERSION = '999.999'; # VERSION
 
-sub _croak { use Carp; goto &Carp::croak }
+sub _croak { require Carp; goto &Carp::croak }
+sub _throw { GraphQL::Client::Error->throw(@_) }
 
 sub new {
     my $class = shift;
     bless {@_}, $class;
 }
 
-sub request {
+sub execute {
     my $self = shift;
     my ($query, $variables, $operation_name, $options) = @_;
 
@@ -32,50 +33,48 @@ sub request {
         $operation_name ? (operationName => $operation_name) : (),
     };
 
-    my $resp = $self->transport->request($request, $options);
-    return $self->_handle_response($resp);
+    return $self->_handle_result($self->transport->execute($request, $options));
 }
 
-my $ERROR_MESSAGE = 'The GraphQL server returned errors';
-sub _handle_response {
+sub _handle_result {
     my $self = shift;
-    my ($resp) = @_;
+    my ($result) = @_;
 
-    if (eval { $resp->isa('Future') }) {
-        return $resp->followed_by(sub {
-            my $f = shift;
-            if (my ($exception, $category, @details) = $f->failure) {
-                if (!$exception->{errors}) {
-                    return Future->fail($exception, $category, @details);
-                }
-                if ($self->unpack) {
-                    return Future->fail($ERROR_MESSAGE, 'graphql', $exception, @details);
-                }
-                return Future->done($exception);
-            }
-            else {
-                my ($resp, @other) = $f->get;
-                if ($self->unpack) {
-                    if ($resp->{errors}) {
-                        return Future->fail($ERROR_MESSAGE, 'graphql', $resp, @other);
-                    }
-                    return Future->done($resp->{data});
-                }
-                return Future->done($resp);
-            }
-        });
-    }
-    else {
+    my $handle_result = sub {
+        my $result = shift;
+        my $resp = $result->{response};
+        if (my $exception = $result->{error}) {
+            unshift @{$resp->{errors}}, {
+                message => "$exception",
+            };
+        }
         if ($self->unpack) {
             if ($resp->{errors}) {
-                throw $ERROR_MESSAGE, {
+                _throw $resp->{errors}[0]{message}, {
                     type        => 'graphql',
                     response    => $resp,
+                    details     => $result->{details},
                 };
             }
             return $resp->{data};
         }
         return $resp;
+    };
+
+    if (eval { $result->isa('Future') }) {
+        return $result->transform(
+            done => sub {
+                my $result = shift;
+                my $resp = eval { $handle_result->($result) };
+                if (my $err = $@) {
+                    Future::Exception->throw("$err", $err->{type}, $err->{response}, $err->{details});
+                }
+                return $resp;
+            },
+        );
+    }
+    else {
+        return $handle_result->($result);
     }
 }
 
@@ -94,7 +93,7 @@ sub transport {
     $self->{transport} //= do {
         my $class = $self->_transport_class;
         eval { load $class };
-        if ((my $err = $@) || !$class->can('request')) {
+        if ((my $err = $@) || !$class->can('execute')) {
             $err ||= "Loaded $class, but it doesn't look like a proper transport.\n";
             warn $err if $ENV{GRAPHQL_CLIENT_DEBUG};
             _croak "Failed to load transport for \"${class}\"";
@@ -137,41 +136,96 @@ sub _expand_class {
     $class;
 }
 
+{
+    package GraphQL::Client::Error;
+
+    use warnings;
+    use strict;
+
+    use overload '""' => \&error, fallback => 1;
+
+    sub new { bless {%{$_[2] || {}}, error => $_[1] || 'Something happened'}, $_[0] }
+
+    sub error { "$_[0]->{error}" }
+    sub type  { "$_[0]->{type}"  }
+
+    sub throw {
+        my $self = shift;
+        die $self if ref $self;
+        die $self->new(@_);
+    }
+}
+
 1;
 __END__
 
 =head1 SYNOPSIS
 
-    my $client = GraphQL::Client->new();
+    my $graphql = GraphQL::Client->new(url => 'http://localhost:4000/graphql');
 
-    my $data = $client->request(q[
+    # Example: Hello world!
+
+    my $response = $graphql->execute('{hello}');
+
+    # Example: Kitchen sink
+
+    my $query = q[
         query GetHuman {
             human(id: $human_id) {
                 name
                 height
             }
         }
-    ], {
+    ];
+    my $variables = {
         human_id => 1000,
+    };
+    my $operation_name = 'GetHuman';
+    my $transport_options = {
+        headers => {
+            authorization => 'Bearer s3cr3t',
+        },
+    };
+    my $response = $graphql->execute($query, $variables, $operation_name, $transport_options);
+
+    # Example: Asynchronous with Mojo::UserAgent (promisify requires Future::Mojo)
+
+    my $ua = Mojo::UserAgent->new;
+    my $graphql = GraphQL::Client->new(ua => $ua, url => 'http://localhost:4000/graphql');
+
+    my $future = $graphql->execute('{hello}');
+
+    $future->promisify->then(sub {
+        my $response = shift;
+        ...
     });
 
 =head1 DESCRIPTION
 
+C<GraphQL::Client> provides a simple way to execute L<GraphQL|https://graphql.org/> queries and
+mutations on a server.
+
+This module is the programmatic interface. There is also a L<graphql|"CLI program">.
+
+GraphQL servers are usually served over HTTP. The provided transport, L<GraphQL::Client::http>, lets
+you plug in your own user agent, so this client works naturally with L<HTTP::Tiny>,
+L<Mojo::UserAgent>, and more. You can also use L<HTTP::AnyUA> middleware.
+
 =method new
 
-    $client = GraphQL::Client->new(%attributes);
+    $graphql = GraphQL::Client->new(%attributes);
 
 Construct a new client.
 
-=method request
+=method execute
 
-    $response = $client->request($query);
-    $response = $client->request($query, \%variables);
-    $response = $client->request($query, \%variables, $operation_name);
-    $response = $client->request($query, \%variables, $operation_name, \%transport_options);
-    $response = $client->request($query, \%variables, \%transport_options);
+    $response = $graphql->execute($query);
+    $response = $graphql->execute($query, \%variables);
+    $response = $graphql->execute($query, \%variables, $operation_name);
+    $response = $graphql->execute($query, \%variables, $operation_name, \%transport_options);
+    $response = $graphql->execute($query, \%variables, \%transport_options);
 
-Get a response from the GraphQL server.
+Execute a request on a GraphQL server, and get a response.
 
 By default, the response will either be a hashref with the following structure or a L<Future> that
 resolves to such a hashref, depending on the transport and how it is configured.
@@ -192,8 +246,6 @@ Note: Setting the L</unpack> attribute affects the response shape.
 =attr url
 
 The URL of a GraphQL endpoint, e.g. C<"http://myapiserver/graphql">.
-
-This is required.
 
 =attr class
 
@@ -231,28 +283,39 @@ will be missing if the response completed without error.
 
 It is up to you to check for errors in the response, so your code might look like this:
 
-    my $response = $client->request(...);
+    my $response = $graphql->execute(...);
     if (my $errors = $response->{errors}) {
-        # handle errors
+        # handle $errors
     }
-    my $data = $response->{data};
-    # do something with $data
+    else {
+        my $data = $response->{data};
+        # do something with $data
+    }
 
-If C<unpack> is 1 (on), then L</request> will return just the data if there were no errors,
-otherwise it will throw an exception. So your code would look like this:
+If C<unpack> is 1 (on), then L</execute> will return just the data if there were no errors,
+otherwise it will throw an exception. So your code would instead look like this:
 
-    my $data = eval { $client->request(...) };
+    my $data = eval { $graphql->execute(...) };
     if (my $error = $@) {
         # handle errors
     }
-    # do something with $data
+    else {
+        # do something with $data
+    }
 
 Or if you want to handle errors in a different stack frame, your code is simply this:
 
-    my $data = $client->request(...);
+    my $data = $graphql->execute(...);
     # do something with $data
 
 Both styles map to L<Future> responses intuitively. If C<unpack> is 0, the response always resolves
 to the envelope structure. If C<unpack> is 1, successful responses will resolve to just the data and
 errors will fail/reject.
+
+=head1 SEE ALSO
+
+=for :list
+* L<graphql> - CLI program
+* L<GraphQL> - Perl implementation of a GraphQL server
+* L<https://graphql.org/> - GraphQL project website
 

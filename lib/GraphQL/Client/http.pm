@@ -7,28 +7,36 @@ use strict;
 
 use HTTP::AnyUA::Util qw(www_form_urlencode);
 use HTTP::AnyUA;
+use namespace::clean;
 
 our $VERSION = '999.999'; # VERSION
 
+sub _croak { require Carp; goto &Carp::croak }
+
 sub new {
     my $class = shift;
-    bless {@_}, $class;
+    my $self  = @_ % 2 == 0 ? {@_} : $_[0];
+    bless $self, $class;
 }
 
-sub request {
+sub execute {
     my $self = shift;
     my ($request, $options) = @_;
 
     my $url     = delete $options->{url}    || $self->url;
     my $method  = delete $options->{method} || $self->method;
 
+    $request && ref($request) eq 'HASH' or _croak q{Usage: $http->execute(\%request)};
+    $request->{query} or _croak q{Request must have a query};
+    $url or _croak q{URL must be provided};
+
     my $data = {%$request};
 
     if ($method eq 'GET' || $method eq 'HEAD') {
         $data->{variables} = $self->json->encode($data->{variables}) if $data->{variables};
         my $params  = www_form_urlencode($data);
-        my $sep     = $url =~ /\?/ ? '&' : '?';
-        $url .= "${sep}${params}";
+        my $sep     = $url =~ /^[^#]+\?/ ? '&' : '?';
+        $url =~ s/#/${sep}${params}#/ or $url .= "${sep}${params}";
     }
     else {
         my $encoded_data = $self->json->encode($data);
@@ -44,51 +52,74 @@ sub _handle_response {
     my $self = shift;
     my ($resp) = @_;
 
-    my $handle_error = sub {
-        my $resp = shift;
+    if (eval { $resp->isa('Future') }) {
+        return $resp->followed_by(sub {
+            my $f = shift;
 
-        my $data = eval { $self->json->decode($resp->{content}) };
-        if ($@) {
-            my $content = $resp->{content} // 'No content';
-            my $reason  = $resp->{reason}  // '';
-            $data = {
-                errors => [
-                    {
-                        message => "HTTP transport returned $resp->{status} ($reason): $content",
+            if (my ($exception, $category, @other) = $f->failure) {
+                if (ref $exception eq 'HASH') {
+                    my $resp = $exception;
+                    return Future->done($self->_handle_error($resp));
+                }
+
+                return Future->done({
+                    error       => $exception,
+                    response    => undef,
+                    details     => {
+                        exception_details => [$category, @other],
                     },
-                ],
-            };
-        }
+                });
+            }
 
-        return ($data, 'graphql', $resp);
-    };
-    my $handle_response = sub {
-        my $resp = shift;
-
-        return $handle_error->($resp) if !$resp->{success};
-        my $data = eval { $self->json->decode($resp->{content}) };
-        if (my $err = $@) {
-            warn $err if $ENV{GRAPHQL_CLIENT_DEBUG};
-            $data = {
-                errors => [
-                    {
-                        message => 'HTTP transport failed to decode response from GraphQL server.',
-                    },
-                ],
-            };
-        }
-        return $data;
-    };
-
-    if ($self->any_ua->response_is_future) {
-        return $resp->transform(
-            done => $handle_response,
-            fail => $handle_error,
-        );
+            my $resp = $f->get;
+            return Future->done($self->_handle_success($resp));
+        });
     }
     else {
-        return $handle_response->($resp);
+        return $self->_handle_error($resp) if !$resp->{success};
+        return $self->_handle_success($resp);
     }
+}
+
+sub _handle_error {
+    my $self = shift;
+    my ($resp) = @_;
+
+    my $data    = eval { $self->json->decode($resp->{content}) };
+    my $content = $resp->{content} // 'No content';
+    my $reason  = $resp->{reason}  // '';
+    my $message = "HTTP transport returned $resp->{status} ($reason): $content";
+
+    return {
+        error       => $message,
+        response    => $data,
+        details     => {
+            http_response   => $resp,
+        },
+    };
+}
+
+sub _handle_success {
+    my $self = shift;
+    my ($resp) = @_;
+
+    my $data = eval { $self->json->decode($resp->{content}) };
+    if (my $exception = $@) {
+        return {
+            error       => "HTTP transport failed to decode response: $exception",
+            response    => undef,
+            details     => {
+                http_response   => $resp,
+            },
+        };
+    }
+
+    return {
+        response    => $data,
+        details     => {
+            http_response   => $resp,
+        },
+    };
 }
 
 sub ua {
@@ -96,7 +127,7 @@ sub ua {
     $self->{ua} //= do {
         require HTTP::Tiny;
         HTTP::Tiny->new(
-            agent   => "perl-graphql-client/$VERSION",
+            agent => $ENV{GRAPHQL_CLIENT_HTTP_USER_AGENT} // "perl-graphql-client/$VERSION",
         );
     };
 }
@@ -134,7 +165,17 @@ __END__
         method  => 'POST',
     );
 
-    my $data = $client->request($query, $variables, $operation_name, $options);
+    my $request = {
+        query           => 'query Greet($name: String) { hello(name: $name) }',
+        operationName   => 'Greet',
+        variables       => { name => 'Bob' },
+    };
+    my $options = {
+        headers => {
+            authorization => 'Bearer s3cr3t',
+        },
+    };
+    my $response = $client->execute($request, $options);
 
 =head1 DESCRIPTION
 
@@ -143,7 +184,7 @@ You probably shouldn't use this directly. Instead use L<GraphQL::Client>.
 C<GraphQL::Client::http> is a GraphQL transport for HTTP. GraphQL is not required to be transported
 via HTTP, but this is definitely the most common way.
 
-This also serves as a reference implementation for future GraphQL transports.
+This also serves as a reference implementation for C<GraphQL::Client> transports.
 
 =method new
 
@@ -151,23 +192,33 @@ This also serves as a reference implementation for future GraphQL transports.
 
 Construct a new GraphQL HTTP transport.
 
-=method request
+See L</ATTRIBUTES>.
 
-    $response = $client->request(\%data, \%options);
+=method execute
+
+    $response = $client->execute(\%request);
+    $response = $client->execute(\%request, \%options);
 
 Get a response from the GraphQL server.
 
 The C<%data> structure must have a C<query> key whose value is the query or mutation string. It may
-optionally have a C<variables> hashref an an C<operationName> string.
+optionally have a C<variables> hashref and an C<operationName> string.
 
-The C<%options> structure contains options passed through to the user agent.
+The C<%options> structure is optional and may contain options passed through to the user agent. The
+only useful options are C<headers> (which should have a hashref value) and C<method> and C<url> to
+override the attributes of the same names.
 
 The response will either be a hashref with the following structure or a L<Future> that resolves to
 such a hashref:
 
     {
-        data   => {...},
-        errors => [...],
+        response    => {    # decoded response (may be undef if an error occurred)
+            data   => {...},
+            errors => [...],
+        },
+        error       => 'Something happened',    # may be ommitted if no error occurred
+        details     => {    # optional information which may aide troubleshooting
+        },
     }
 
 =attr ua
@@ -186,6 +237,10 @@ See L<HTTP::AnyUA/"SUPPORTED USER AGENTS">.
 
 The L<HTTP::AnyUA> instance. Can be used to apply middleware if desired.
 
+=attr url
+
+The http URL of a GraphQL endpoint, e.g. C<"http://myapiserver/graphql">.
+
 =attr method
 
 The HTTP method to use when querying the GraphQL server. Can be one of:
@@ -193,6 +248,10 @@ The HTTP method to use when querying the GraphQL server. Can be one of:
 =for :list
 * C<GET>
 * C<POST> (default)
+
+GraphQL servers should be able to handle both, but you can set this explicitly to one or the other
+if you're dealing with a server that is opinionated. You can also provide a different HTTP method,
+but anything other than C<GET> and C<POST> are less likely to work.
 
 =attr json
 

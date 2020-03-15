@@ -16,6 +16,10 @@ sub new {
 1;
 __END__
 
+=head1 DESCRIPTION
+
+This is the same as L<GraphQL::Client::http>.
+
 =head1 SEE ALSO
 
 L<GraphQL::Client::http>
