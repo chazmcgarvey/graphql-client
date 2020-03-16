@@ -8,7 +8,7 @@ use Module::Load qw(load);
 use Scalar::Util qw(reftype);
 use namespace::clean;
 
-our $VERSION = '0.600'; # VERSION
+our $VERSION = '0.601'; # VERSION
 
 sub _croak { require Carp; goto &Carp::croak }
 sub _throw { GraphQL::Client::Error->throw(@_) }
@@ -83,15 +83,15 @@ sub url {
     $self->{url};
 }
 
-sub class {
+sub transport_class {
     my $self = shift;
-    $self->{class};
+    $self->{transport_class};
 }
 
 sub transport {
     my $self = shift;
     $self->{transport} //= do {
-        my $class = $self->_transport_class;
+        my $class = $self->_autodetermine_transport_class;
         eval { load $class };
         if ((my $err = $@) || !$class->can('execute')) {
             $err ||= "Loaded $class, but it doesn't look like a proper transport.\n";
@@ -116,15 +116,16 @@ sub _url_protocol {
     return $protocol;
 }
 
-sub _transport_class {
+sub _autodetermine_transport_class {
     my $self = shift;
 
-    return _expand_class($self->{class}) if $self->{class};
+    my $class = $self->transport_class;
+    return _expand_class($class) if $class;
 
     my $protocol = $self->_url_protocol;
     _croak 'Failed to determine transport from URL' if !$protocol;
 
-    my $class = lc($protocol);
+    $class = lc($protocol);
     $class =~ s/[^a-z]/_/g;
 
     return _expand_class($class);
@@ -170,7 +171,7 @@ GraphQL::Client - A GraphQL client
 
 =head1 VERSION
 
-version 0.600
+version 0.601
 
 =head1 SYNOPSIS
 
@@ -218,7 +219,7 @@ version 0.600
 C<GraphQL::Client> provides a simple way to execute L<GraphQL|https://graphql.org/> queries and
 mutations on a server.
 
-This module is the programmatic interface. There is also a L<graphql|"CLI program">.
+This module is the programmatic interface. There is also a L<"CLI program"|graphql>.
 
 GraphQL servers are usually served over HTTP. The provided transport, L<GraphQL::Client::http>, lets
 you plug in your own user agent, so this client works naturally with L<HTTP::Tiny>,
@@ -230,18 +231,6 @@ L<Mojo::UserAgent>, and more. You can also use L<HTTP::AnyUA> middleware.
 
 The URL of a GraphQL endpoint, e.g. C<"http://myapiserver/graphql">.
 
-=head2 class
-
-The package name of a transport.
-
-By default this is automatically determined from the protocol portion of the L</url>.
-
-=head2 transport
-
-The transport object.
-
-By default this is automatically constructed based on the L</class>.
-
 =head2 unpack
 
 Whether or not to "unpack" the response, which enables a different style for error-handling.
@@ -249,6 +238,18 @@ Whether or not to "unpack" the response, which enables a different style for err
 Default is 0.
 
 See L</ERROR HANDLING>.
+
+=head2 transport_class
+
+The package name of a transport.
+
+This is optional if the correct transport can be correctly determined from the L</url>.
+
+=head2 transport
+
+The transport object.
+
+By default this is automatically constructed based on L</transport_class> or L</url>.
 
 =head1 METHODS
 
@@ -288,7 +289,8 @@ Note: Setting the L</unpack> attribute affects the response shape.
 
 There are two different styles for handling errors.
 
-If L</unpack> is 0 (off), every response -- whether success or failure -- is enveloped like this:
+If L</unpack> is 0 (off, the default), every response -- whether success or failure -- is enveloped
+like this:
 
     {
         data   => {...},
@@ -314,6 +316,7 @@ otherwise it will throw an exception. So your code would instead look like this:
 
     my $data = eval { $graphql->execute(...) };
     if (my $error = $@) {
+        my $resp = $error->{response};
         # handle errors
     }
     else {

@@ -4,7 +4,7 @@ NAME
 
 VERSION
 
-    version 0.600
+    version 0.601
 
 SYNOPSIS
 
@@ -52,7 +52,8 @@ DESCRIPTION
     GraphQL::Client provides a simple way to execute GraphQL
     <https://graphql.org/> queries and mutations on a server.
 
-    This module is the programmatic interface. There is also a graphql.
+    This module is the programmatic interface. There is also a "CLI
+    program".
 
     GraphQL servers are usually served over HTTP. The provided transport,
     GraphQL::Client::http, lets you plug in your own user agent, so this
@@ -65,19 +66,6 @@ ATTRIBUTES
 
     The URL of a GraphQL endpoint, e.g. "http://myapiserver/graphql".
 
- class
-
-    The package name of a transport.
-
-    By default this is automatically determined from the protocol portion
-    of the "url".
-
- transport
-
-    The transport object.
-
-    By default this is automatically constructed based on the "class".
-
  unpack
 
     Whether or not to "unpack" the response, which enables a different
@@ -86,6 +74,20 @@ ATTRIBUTES
     Default is 0.
 
     See "ERROR HANDLING".
+
+ transport_class
+
+    The package name of a transport.
+
+    This is optional if the correct transport can be correctly determined
+    from the "url".
+
+ transport
+
+    The transport object.
+
+    By default this is automatically constructed based on "transport_class"
+    or "url".
 
 METHODS
 
@@ -126,8 +128,8 @@ ERROR HANDLING
 
     There are two different styles for handling errors.
 
-    If "unpack" is 0 (off), every response -- whether success or failure --
-    is enveloped like this:
+    If "unpack" is 0 (off, the default), every response -- whether success
+    or failure -- is enveloped like this:
 
         {
             data   => {...},
@@ -156,6 +158,7 @@ ERROR HANDLING
 
         my $data = eval { $graphql->execute(...) };
         if (my $error = $@) {
+            my $resp = $error->{response};
             # handle errors
         }
         else {
