@@ -9,5 +9,7 @@
 /MYMETA.*
 /blib
 /cover_db
+/fatlib
+/graphql
 /local*
 /pm_to_blib

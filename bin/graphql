@@ -331,7 +331,7 @@ See L</EXAMPLES>.
 
 =head1 FORMAT
 
-The C<--format> argument can be one of:
+The argument for L</"--format STR"> can be one of:
 
 =for :list
 * C<csv> - Comma-separated values (requires L<Text::CSV>)

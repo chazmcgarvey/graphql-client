@@ -80,6 +80,8 @@ sub run {
     $moduledir->mkpath;
     system(qw{cp -r}, $fatlibdir, $distdir->child('lib'), "$moduledir/");
 
+    $moduledir->child('fatlib/Test')->remove_tree({safe => 0});     # don't need Test:: modules
+
     my $fatpack = do {
         my $cd_builddir = pushd($moduledir);
 

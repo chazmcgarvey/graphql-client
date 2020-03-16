@@ -24,7 +24,7 @@ dist:
 	$(DZIL) build
 
 distclean: clean
-	rm -rf cover_db
+	rm -rf .build cover_db fatlib
 
 test:
 	$(PROVE) -l$(if $(findstring 1,$(V)),v) t
