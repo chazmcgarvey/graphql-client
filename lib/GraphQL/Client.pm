@@ -272,7 +272,8 @@ By default this is automatically constructed based on L</transport_class> or L</
 
 There are two different styles for handling errors.
 
-If L</unpack> is 0 (off), every response -- whether success or failure -- is enveloped like this:
+If L</unpack> is 0 (off, the default), every response -- whether success or failure -- is enveloped
+like this:
 
     {
         data   => {...},
@@ -298,6 +299,7 @@ otherwise it will throw an exception. So your code would instead look like this:
 
     my $data = eval { $graphql->execute(...) };
     if (my $error = $@) {
+        my $resp = $error->{response};
         # handle errors
     }
     else {

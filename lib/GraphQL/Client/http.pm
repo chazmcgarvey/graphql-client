@@ -175,7 +175,7 @@ __END__
             authorization => 'Bearer s3cr3t',
         },
     };
-    my $response = $client->execute($request, $options);
+    my $response = $transport->execute($request, $options);
 
 =head1 DESCRIPTION
 
