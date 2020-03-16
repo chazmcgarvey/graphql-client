@@ -205,7 +205,7 @@ __END__
 C<GraphQL::Client> provides a simple way to execute L<GraphQL|https://graphql.org/> queries and
 mutations on a server.
 
-This module is the programmatic interface. There is also a L<graphql|"CLI program">.
+This module is the programmatic interface. There is also a L<"CLI program"|graphql>.
 
 GraphQL servers are usually served over HTTP. The provided transport, L<GraphQL::Client::http>, lets
 you plug in your own user agent, so this client works naturally with L<HTTP::Tiny>,
