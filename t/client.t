@@ -14,14 +14,14 @@ use GraphQL::Client;
 use MockTransport;
 
 subtest 'transport' => sub {
-    my $client = GraphQL::Client->new(class => 'http');
-    isa_ok($client->transport, 'GraphQL::Client::http', 'decide transport from class');
+    my $client = GraphQL::Client->new(transport_class => 'http');
+    isa_ok($client->transport, 'GraphQL::Client::http', 'decide transport from transport_class');
 
     $client = GraphQL::Client->new(url => 'https://localhost:4000/graphql');
     isa_ok($client->transport, 'GraphQL::Client::http', 'decide transport from url');
 
-    $client = GraphQL::Client->new(class => 'not a real class');
-    is($client->class, 'not a real class', 'class constructor works');
+    $client = GraphQL::Client->new(transport_class => 'not a real class');
+    is($client->transport_class, 'not a real class', 'transport_class constructor works');
     throws_ok { $client->transport } qr/^Failed to load transport/, 'throws if invalid transport';
 };
 

@@ -83,15 +83,15 @@ sub url {
     $self->{url};
 }
 
-sub class {
+sub transport_class {
     my $self = shift;
-    $self->{class};
+    $self->{transport_class};
 }
 
 sub transport {
     my $self = shift;
     $self->{transport} //= do {
-        my $class = $self->_transport_class;
+        my $class = $self->_autodetermine_transport_class;
         eval { load $class };
         if ((my $err = $@) || !$class->can('execute')) {
             $err ||= "Loaded $class, but it doesn't look like a proper transport.\n";
@@ -116,15 +116,16 @@ sub _url_protocol {
     return $protocol;
 }
 
-sub _transport_class {
+sub _autodetermine_transport_class {
     my $self = shift;
 
-    return _expand_class($self->{class}) if $self->{class};
+    my $class = $self->transport_class;
+    return _expand_class($class) if $class;
 
     my $protocol = $self->_url_protocol;
     _croak 'Failed to determine transport from URL' if !$protocol;
 
-    my $class = lc($protocol);
+    $class = lc($protocol);
     $class =~ s/[^a-z]/_/g;
 
     return _expand_class($class);
@@ -247,18 +248,6 @@ Note: Setting the L</unpack> attribute affects the response shape.
 
 The URL of a GraphQL endpoint, e.g. C<"http://myapiserver/graphql">.
 
-=attr class
-
-The package name of a transport.
-
-By default this is automatically determined from the protocol portion of the L</url>.
-
-=attr transport
-
-The transport object.
-
-By default this is automatically constructed based on the L</class>.
-
 =attr unpack
 
 Whether or not to "unpack" the response, which enables a different style for error-handling.
@@ -266,6 +255,18 @@ Whether or not to "unpack" the response, which enables a different style for err
 Default is 0.
 
 See L</ERROR HANDLING>.
+
+=attr transport_class
+
+The package name of a transport.
+
+This is optional if the correct transport can be correctly determined from the L</url>.
+
+=attr transport
+
+The transport object.
+
+By default this is automatically constructed based on L</transport_class> or L</url>.
 
 =head1 ERROR HANDLING
 
