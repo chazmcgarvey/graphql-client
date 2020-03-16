@@ -1,5 +1,7 @@
 Revision history for GraphQL-Client.
 
 {{$NEXT}}
+
+0.600     2020-03-15 18:08:57-06:00 MST7MDT
   * Initial public release
 
