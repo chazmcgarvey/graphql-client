@@ -4,7 +4,7 @@ GraphQL::Client - A GraphQL client
 
 # VERSION
 
-version 0.600
+version 0.601
 
 # SYNOPSIS
 
@@ -52,7 +52,7 @@ version 0.600
 `GraphQL::Client` provides a simple way to execute [GraphQL](https://graphql.org/) queries and
 mutations on a server.
 
-This module is the programmatic interface. There is also a [graphql](#cli-program).
+This module is the programmatic interface. There is also a ["CLI program"](https://metacpan.org/pod/graphql).
 
 GraphQL servers are usually served over HTTP. The provided transport, [GraphQL::Client::http](https://metacpan.org/pod/GraphQL%3A%3AClient%3A%3Ahttp), lets
 you plug in your own user agent, so this client works naturally with [HTTP::Tiny](https://metacpan.org/pod/HTTP%3A%3ATiny),
@@ -64,18 +64,6 @@ you plug in your own user agent, so this client works naturally with [HTTP::Tiny
 
 The URL of a GraphQL endpoint, e.g. `"http://myapiserver/graphql"`.
 
-## class
-
-The package name of a transport.
-
-By default this is automatically determined from the protocol portion of the ["url"](#url).
-
-## transport
-
-The transport object.
-
-By default this is automatically constructed based on the ["class"](#class).
-
 ## unpack
 
 Whether or not to "unpack" the response, which enables a different style for error-handling.
@@ -83,6 +71,18 @@ Whether or not to "unpack" the response, which enables a different style for err
 Default is 0.
 
 See ["ERROR HANDLING"](#error-handling).
+
+## transport\_class
+
+The package name of a transport.
+
+This is optional if the correct transport can be correctly determined from the ["url"](#url).
+
+## transport
+
+The transport object.
+
+By default this is automatically constructed based on ["transport\_class"](#transport_class) or ["url"](#url).
 
 # METHODS
 
@@ -122,7 +122,8 @@ Note: Setting the ["unpack"](#unpack) attribute affects the response shape.
 
 There are two different styles for handling errors.
 
-If ["unpack"](#unpack) is 0 (off), every response -- whether success or failure -- is enveloped like this:
+If ["unpack"](#unpack) is 0 (off, the default), every response -- whether success or failure -- is enveloped
+like this:
 
     {
         data   => {...},
@@ -148,6 +149,7 @@ otherwise it will throw an exception. So your code would instead look like this:
 
     my $data = eval { $graphql->execute(...) };
     if (my $error = $@) {
+        my $resp = $error->{response};
         # handle errors
     }
     else {
