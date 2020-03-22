@@ -13,6 +13,7 @@ delete $ENV{GRAPHQL_CLIENT_OPTIONS};
 subtest 'get_options' => sub {
     my $expected = {
         format          => 'json:pretty',
+        filter          => undef,
         help            => undef,
         manual          => undef,
         operation_name  => undef,
