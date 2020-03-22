@@ -4,7 +4,7 @@ graphql - Command-line GraphQL client
 
 # VERSION
 
-version 0.602
+version 0.603
 
 # SYNOPSIS
 
@@ -116,9 +116,10 @@ By default, the response structure is printed as-is from the server, and the pro
 
 When unpack mode is enabled, if the response completes with no errors, only the data section of
 the response is printed and the program exits 0. If the response has errors, the whole response
-structure is printed as-is and the program exits 1.
+structure is printed as-is and the program exits 1. See ["EXAMPLES"](#examples) to see what this looks like in
+practice.
 
-See ["EXAMPLES"](#examples).
+Use `--no-unpack` to disable if unpack mode was enabled via `GRAPHQL_CLIENT_OPTIONS`.
 
 # FORMAT
 
