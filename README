@@ -4,14 +4,14 @@ NAME
 
 VERSION
 
-    version 0.603
+    version 0.604
 
 SYNOPSIS
 
         graphql <URL> <QUERY> [ [--variables JSON] | [--variable KEY=VALUE]... ]
                 [--operation-name NAME] [--transport KEY=VALUE]...
-                [--[no-]unpack] [--format json|json:pretty|yaml|perl|csv|tsv|table]
-                [--output FILE]
+                [--[no-]unpack] [--filter JSONPATH]
+                [--format json|json:pretty|yaml|perl|csv|tsv|table] [--output FILE]
     
         graphql --version|--help|--manual
 
@@ -127,6 +127,14 @@ OPTIONS
 
     Use --no-unpack to disable if unpack mode was enabled via
     GRAPHQL_CLIENT_OPTIONS.
+
+ --filter JSONPATH
+
+    Filter the response based on a JSONPath expression.
+
+    Requires JSON::Path.
+
+    Alias: -p
 
 FORMAT
 

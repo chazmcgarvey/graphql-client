@@ -9,7 +9,7 @@ use HTTP::AnyUA::Util qw(www_form_urlencode);
 use HTTP::AnyUA;
 use namespace::clean;
 
-our $VERSION = '0.603'; # VERSION
+our $VERSION = '0.604'; # VERSION
 
 sub _croak { require Carp; goto &Carp::croak }
 
@@ -171,7 +171,7 @@ GraphQL::Client::http - GraphQL over HTTP
 
 =head1 VERSION
 
-version 0.603
+version 0.604
 
 =head1 SYNOPSIS
 

@@ -65,6 +65,7 @@ do { my $x = {
                                     },
                       'suggests' => {
                                       'Data::Dumper' => '0',
+                                      'JSON::Path::Evaluator' => '0',
                                       'Text::CSV' => '0',
                                       'Text::Table::Any' => '0',
                                       'YAML' => '0'

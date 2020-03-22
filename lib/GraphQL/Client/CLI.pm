@@ -11,7 +11,7 @@ use JSON::MaybeXS;
 use Text::ParseWords;
 use namespace::clean;
 
-our $VERSION = '0.603'; # VERSION
+our $VERSION = '0.604'; # VERSION
 
 my $JSON = JSON::MaybeXS->new(canonical => 1);
 
@@ -84,6 +84,17 @@ sub main {
         *STDOUT = $out;
     }
 
+    if (my $filter = $options->{filter}) {
+        eval { require JSON::Path::Evaluator } or die "Missing dependency: JSON::Path\n";
+        my @values = JSON::Path::Evaluator::evaluate_jsonpath($data, $filter);
+        if (@values == 1) {
+            $data = $values[0];
+        }
+        else {
+            $data = \@values;
+        }
+    }
+
     binmode(STDOUT, 'encoding(UTF-8)');
     _print_data($data, $format);
 
@@ -115,6 +126,7 @@ sub _get_options {
         'operation-name|n=s'    => \$options{operation_name},
         'transport|t=s%'        => \$options{transport},
         'format|f=s'            => \$options{format},
+        'filter|p=s'            => \$options{filter},
         'unpack!'               => \$options{unpack},
         'output|o=s'            => \$options{outfile},
     ) or _pod2usage(2);
@@ -167,25 +179,40 @@ sub _print_data {
 
         my $unpacked = $data;
         # $unpacked = $data->{data} if !$unpack && !$err;
-        $unpacked = $data->{data} if $data && $data->{data};
+        $unpacked = $data->{data} if ref $data eq 'HASH' && $data->{data};
 
         # check the response to see if it can be formatted
         my @columns;
         my $rows = [];
-        if (keys %$unpacked == 1) {
-            my ($val) = values %$unpacked;
-            if (ref $val eq 'ARRAY') {
-                my $first = $val->[0];
-                if ($first && ref $first eq 'HASH') {
-                    @columns = sort keys %$first;
-                    $rows = [
-                        map { [map { _stringify($_) } @{$_}{@columns}] } @$val
-                    ];
+        if (ref $unpacked eq 'HASH') {
+            if (keys %$unpacked == 1) {
+                my ($val) = values %$unpacked;
+                if (ref $val eq 'ARRAY') {
+                    my $first = $val->[0];
+                    if ($first && ref $first eq 'HASH') {
+                        @columns = sort keys %$first;
+                        $rows = [
+                            map { [map { _stringify($_) } @{$_}{@columns}] } @$val
+                        ];
+                    }
+                    elsif ($first) {
+                        @columns = keys %$unpacked;
+                        $rows = [map { [map { _stringify($_) } $_] } @$val];
+                    }
                 }
-                elsif ($first) {
-                    @columns = keys %$unpacked;
-                    $rows = [map { [map { _stringify($_) } $_] } @$val];
-                }
+            }
+        }
+        elsif (ref $unpacked eq 'ARRAY') {
+            my $first = $unpacked->[0];
+            if ($first && ref $first eq 'HASH') {
+                @columns = sort keys %$first;
+                $rows = [
+                    map { [map { _stringify($_) } @{$_}{@columns}] } @$unpacked
+                ];
+            }
+            elsif ($first) {
+                @columns = qw(column);
+                $rows = [map { [map { _stringify($_) } $_] } @$unpacked];
             }
         }
 
@@ -214,13 +241,26 @@ sub _print_data {
             exit 3;
         }
     }
+    elsif ($format eq 'string') {
+        if (!ref $data) {
+            print $data, "\n";
+        }
+        elsif (ref $data eq 'ARRAY') {
+            print join("\n", @$data);
+        }
+        else {
+            _print_data($data);
+            print STDERR sprintf("Error: Response could not be formatted as %s.\n", $format);
+            exit 3;
+        }
+    }
     elsif ($format eq 'perl') {
         eval { require Data::Dumper } or die "Missing dependency: Data::Dumper\n";
         print Data::Dumper::Dumper($data);
     }
     else {
-        print STDERR "Error: Format not supported: $format\n";
         _print_data($data);
+        print STDERR "Error: Format not supported: $format\n";
         exit 3;
     }
 }
@@ -328,7 +368,7 @@ GraphQL::Client::CLI - Implementation of the graphql CLI program
 
 =head1 VERSION
 
-version 0.603
+version 0.604
 
 =head1 DESCRIPTION
 
