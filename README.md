@@ -4,14 +4,14 @@ graphql - Command-line GraphQL client
 
 # VERSION
 
-version 0.603
+version 0.604
 
 # SYNOPSIS
 
     graphql <URL> <QUERY> [ [--variables JSON] | [--variable KEY=VALUE]... ]
             [--operation-name NAME] [--transport KEY=VALUE]...
-            [--[no-]unpack] [--format json|json:pretty|yaml|perl|csv|tsv|table]
-            [--output FILE]
+            [--[no-]unpack] [--filter JSONPATH]
+            [--format json|json:pretty|yaml|perl|csv|tsv|table] [--output FILE]
 
     graphql --version|--help|--manual
 
@@ -120,6 +120,14 @@ structure is printed as-is and the program exits 1. See ["EXAMPLES"](#examples) 
 practice.
 
 Use `--no-unpack` to disable if unpack mode was enabled via `GRAPHQL_CLIENT_OPTIONS`.
+
+## `--filter JSONPATH`
+
+Filter the response based on a [JSONPath](https://metacpan.org/pod/JSON%3A%3APath#SYNOPSIS) expression.
+
+Requires [JSON::Path](https://metacpan.org/pod/JSON%3A%3APath).
+
+Alias: `-p`
 
 # FORMAT
 
