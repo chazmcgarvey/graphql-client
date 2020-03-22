@@ -4,13 +4,16 @@ package GraphQL::Client::CLI;
 use warnings;
 use strict;
 
-use Text::ParseWords;
+use Encode qw(decode);
 use Getopt::Long 2.39 qw(GetOptionsFromArray);
 use GraphQL::Client;
-use JSON::MaybeXS qw(encode_json);
+use JSON::MaybeXS;
+use Text::ParseWords;
 use namespace::clean;
 
 our $VERSION = '999.999'; # VERSION
+
+my $JSON = JSON::MaybeXS->new(canonical => 1);
 
 sub _croak { require Carp; goto &Carp::croak }
 
@@ -67,6 +70,7 @@ sub main {
     if ($query eq '-') {
         print STDERR "Interactive mode engaged! Waiting for a query on <STDIN>...\n"
             if -t STDIN; ## no critic (InputOutput::ProhibitInteractiveTest)
+        binmode(STDIN, 'encoding(UTF-8)');
         $query = do { local $/; <STDIN> };
     }
 
@@ -80,6 +84,7 @@ sub main {
         *STDOUT = $out;
     }
 
+    binmode(STDOUT, 'encoding(UTF-8)');
     _print_data($data, $format);
 
     exit($unpack && $err ? 1 : 0);
@@ -90,6 +95,9 @@ sub _get_options {
     my @args = @_;
 
     unshift @args, shellwords($ENV{GRAPHQL_CLIENT_OPTIONS} || '');
+
+    # assume UTF-8 args if non-ASCII
+    @args = map { decode('UTF-8', $_) } @args if grep { /\P{ASCII}/ } @args;
 
     my %options = (
         format  => 'json:pretty',
@@ -124,7 +132,7 @@ sub _get_options {
         die "Two or more --variable keys are incompatible.\n" if $@;
     }
     elsif ($options{variables}) {
-        $options{variables} = eval { JSON::MaybeXS->new->decode($options{variables}) };
+        $options{variables} = eval { $JSON->decode($options{variables}) };
         die "The --variables JSON does not parse.\n" if $@;
     }
 
@@ -136,9 +144,9 @@ sub _stringify {
     if (ref($item) eq 'ARRAY') {
         my $first = @$item && $item->[0];
         return join(',', @$item) if !ref($first);
-        return join(',', map { encode_json($_) } @$item);
+        return join(',', map { $JSON->encode($_) } @$item);
     }
-    return encode_json($item) if ref($item) eq 'HASH';
+    return $JSON->encode($item) if ref($item) eq 'HASH';
     return $item;
 }
 
@@ -146,7 +154,7 @@ sub _print_data {
     my ($data, $format) = @_;
     $format = lc($format || 'json:pretty');
     if ($format eq 'json' || $format eq 'json:pretty') {
-        my %opts = (allow_nonref => 1, canonical => 1, utf8 => 1);
+        my %opts = (allow_nonref => 1, canonical => 1);
         $opts{pretty} = 1 if $format eq 'json:pretty';
         print JSON::MaybeXS->new(%opts)->encode($data);
     }

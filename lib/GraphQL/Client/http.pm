@@ -42,7 +42,7 @@ sub execute {
         my $encoded_data = $self->json->encode($data);
         $options->{content} = $encoded_data;
         $options->{headers}{'content-length'} = length $encoded_data;
-        $options->{headers}{'content-type'}   = 'application/json';
+        $options->{headers}{'content-type'}   = 'application/json;charset=UTF-8';
     }
 
     return $self->_handle_response($self->any_ua->request($method, $url, $options));
