@@ -7,7 +7,7 @@ use strict;
 use Text::ParseWords;
 use Getopt::Long 2.39 qw(GetOptionsFromArray);
 use GraphQL::Client;
-use JSON::MaybeXS;
+use JSON::MaybeXS qw(encode_json);
 use namespace::clean;
 
 our $VERSION = '999.999'; # VERSION
@@ -131,6 +131,17 @@ sub _get_options {
     return \%options;
 }
 
+sub _stringify {
+    my ($item) = @_;
+    if (ref($item) eq 'ARRAY') {
+        my $first = @$item && $item->[0];
+        return join(',', @$item) if !ref($first);
+        return join(',', map { encode_json($_) } @$item);
+    }
+    return encode_json($item) if ref($item) eq 'HASH';
+    return $item;
+}
+
 sub _print_data {
     my ($data, $format) = @_;
     $format = lc($format || 'json:pretty');
@@ -160,12 +171,12 @@ sub _print_data {
                 if ($first && ref $first eq 'HASH') {
                     @columns = sort keys %$first;
                     $rows = [
-                        map { [@{$_}{@columns}] } @$val
+                        map { [map { _stringify($_) } @{$_}{@columns}] } @$val
                     ];
                 }
                 elsif ($first) {
                     @columns = keys %$unpacked;
-                    $rows = [map { [$_] } @$val];
+                    $rows = [map { [map { _stringify($_) } $_] } @$val];
                 }
             }
         }
