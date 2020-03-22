@@ -27,11 +27,12 @@ my $core_version        = '5.010001';
 my $plenv_version       = '5.10.1';
 my %blacklist_modules   = map { $_ => 1 } (
     'perl',
-    'Text::Table::ASV',     # brought in by Text::Table::Any but not actually required
-    'Unicode::GCString',    # optional XS module
+    'Text::Table::ASV',         # brought in by Text::Table::Any but not actually required
+    'Unicode::GCString',        # optional XS module
+    'JSON::Path::Evaluator',    # requires perl 5.16
 );
 my @extra_modules = (
-    'Proc::Find::Parents',  # used by Term::Detect::Software on some platforms
+    'Proc::Find::Parents',      # used by Term::Detect::Software on some platforms
 );
 
 my $clean = 0;
