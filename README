@@ -4,7 +4,7 @@ NAME
 
 VERSION
 
-    version 0.602
+    version 0.603
 
 SYNOPSIS
 
@@ -122,9 +122,11 @@ OPTIONS
     When unpack mode is enabled, if the response completes with no errors,
     only the data section of the response is printed and the program exits
     0. If the response has errors, the whole response structure is printed
-    as-is and the program exits 1.
+    as-is and the program exits 1. See "EXAMPLES" to see what this looks
+    like in practice.
 
-    See "EXAMPLES".
+    Use --no-unpack to disable if unpack mode was enabled via
+    GRAPHQL_CLIENT_OPTIONS.
 
 FORMAT
 
