@@ -138,6 +138,7 @@ sub _get_options {
 
     my $transport = eval { _expand_vars($options{transport}) };
     die "Two or more --transport keys are incompatible.\n" if $@;
+    $options{transport} = $transport if ref $transport eq 'HASH' && %$transport;
 
     if (ref $options{variables}) {
         $options{variables} = eval { _expand_vars($options{variables}) };
