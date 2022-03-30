@@ -2,6 +2,9 @@ Revision history for GraphQL-Client.
 
 {{$NEXT}}
 
+0.605     2022-03-29 19:39:31-06:00 America/Denver
+  * Fix bug preventing use of transport headers with CLI. (thanks jwrightecs)
+
 0.604     2020-03-22 03:44:44-06:00 MST7MDT
   * Add --filter JSONPATH argument to CLI.
 

@@ -4,7 +4,7 @@ graphql - Command-line GraphQL client
 
 # VERSION
 
-version 0.604
+version 0.605
 
 # SYNOPSIS
 
@@ -264,7 +264,11 @@ feature.
 
 # AUTHOR
 
-Charles McGarvey <chazmcgarvey@brokenzipper.com>
+Charles McGarvey <ccm@cpan.org>
+
+# CONTRIBUTOR
+
+jwright <jwright@ecstuning.com>
 
 # COPYRIGHT AND LICENSE
 
